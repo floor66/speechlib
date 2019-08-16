@@ -5,44 +5,95 @@ import struct
 import matplotlib.pyplot as plt
 import numpy as np
 
-AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1_min.wav")
-THRESHOLD = 500
+AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1.wav")
+SILENCE_THRESHOLD = 1000
+MIN_SILENCE_LEN = 2000
+MIN_PHRASE_LEN = 2000
+DRAW = False
+EXPORT = True
+RECOGNIZE = True
 
+# Detect silences in audio
 with wav.open(AUDIO_FILE, "rb") as src:
     signal = src.readframes(-1)
     signal = np.fromstring(signal, "Int16")
 
-    words = []
-    word = []
+    silences = []
+    silence_start = None
     for i in range(len(signal)):
-        if abs(signal[i]) > THRESHOLD:
-            word.append(signal[i])
-        else:
-            word = []
+        if abs(signal[i]) <= SILENCE_THRESHOLD: # there is silence
+            if silence_start is None: # we are not recording
+                    silence_start = i # start "recording" this silence
+        elif silence_start is not None: # there is sound, stop recording current silence?
+            if (i - silence_start) > MIN_SILENCE_LEN: # was this silence long enough?
+                silences.append((silence_start, i, i - silence_start))
 
-    print(words)
+            silence_start = None
 
-    t = np.linspace(0, len(signal) / src.getframerate(), num=len(signal))
-    plt.plot(words[0])
-    plt.axhline(THRESHOLD, color="black")
-    plt.axhline(-THRESHOLD, color="black")
-    plt.show()
+    if DRAW:
+        #plt.plot([pow(s, 2) for s in signal])
+        #t = np.linspace(0, len(signal) / src.getframerate(), num=len(signal))
+        plt.plot(signal)
+        plt.axhline(SILENCE_THRESHOLD, color="black", linestyle="dashed")
+        plt.axhline(-SILENCE_THRESHOLD, color="black", linestyle="dashed")
 
-# # use the audio file as the audio source
-# r = sr.Recognizer()
-# with sr.AudioFile(AUDIO_FILE) as source:
-#     audio = r.record(source)  # read the entire audio file
+    # phrase = end of prev silence - half of prev silence to start of next silence + half of next silence
+    phrases = []
+    prev_silence = (0, 0, 0) # start, end, length
+    for start, end, length in silences:
+        phrases.append((prev_silence[1] - (prev_silence[2] // 2), start + (length // 2)))
 
-# print(audio)
+        #if DRAW:
+        #    plt.axvspan(start, end, color="black", alpha=0.25)
+        
+        prev_silence = (start, end, length)
 
-# # # recognize speech using Google Speech Recognition
-# try:
-#     # for testing purposes, we're just using the default API key
-#     # to use another API key, use `r.recognize_google(audio, key="GOOGLE_SPEECH_RECOGNITION_API_KEY")`
-#     # instead of `r.recognize_google(audio)`
-#     print("Google Speech Recognition thinks you said " + r.recognize_google(audio))
-# except sr.UnknownValueError:
-#     print("Google Speech Recognition could not understand audio")
-# except sr.RequestError as e:
-#     print("Could not request results from Google Speech Recognition service; {0}".format(e))
+    print(len(phrases), "phrases")
+    i = 0
+    for start, end in phrases:
+        i += 1
+
+        if (end - start) < MIN_PHRASE_LEN:
+            continue
+
+        if DRAW:
+            plt.axvline(start, color="black")
+            plt.axvline(end, color="black")
+            plt.axvspan(start, end, color="red", alpha=0.25)
+            plt.text(start, 1, str(i))
+        
+        if EXPORT:
+            OUT_FILE = "samples/out/full/%i/phrase-%i-%i_%i.wav" % (SILENCE_THRESHOLD, i, start, end)
+
+            with wav.open(OUT_FILE, "w") as out:
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(44100.0)
+
+                for j in range(start, end):
+                    data = struct.pack("<h", signal[j])
+                    out.writeframesraw(data)
+
+            if RECOGNIZE:
+                # use the audio file as the audio source
+                r = sr.Recognizer()
+                with sr.AudioFile(OUT_FILE) as source:
+                    audio = r.record(source)  # read the entire audio file
+
+                # # recognize speech using Google Speech Recognition
+                try:
+                    print("phrase_%i: %s" % (i, r.recognize_google(audio)))
+                except sr.UnknownValueError:
+                    pass
+                    #print("Google Speech Recognition could not understand audio")
+                except sr.RequestError as e:
+                    pass
+                    #print("Could not request results from Google Speech Recognition service; {0}".format(e))
+                except Exception as e:
+                    pass
+                    #print(e)
+
+    if DRAW:
+        plt.show()
+
 
