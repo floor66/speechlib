@@ -7,21 +7,21 @@ import numpy as np
 from matplotlib.ticker import FuncFormatter
 from hashlib import md5
 
-AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1_min.wav")
+AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1.wav")
 
-SILENCE_THRESHOLD = 500
-DELTA_THRESHOLD = 100
-WINDOW_SIZE = 10000
+SILENCE_THRESHOLD = 300
+DELTA_THRESHOLD = 200
+WINDOW_SIZE = 7500
 MIN_SILENCE_LEN = 2000
-MIN_fragment_LEN = 10000
+MIN_FRAGMENT_LEN = 10000
 DRAW = True
 EXPORT = True
 RECOGNIZE = True
 
-RUN_ID = md5(("%s+%s+%s+%s+%s+%s" % (AUDIO_FILE, str(SILENCE_THRESHOLD), str(DELTA_THRESHOLD), str(WINDOW_SIZE), str(MIN_SILENCE_LEN), str(MIN_fragment_LEN))).encode()).hexdigest()
+RUN_ID = md5(("%s+%s+%s+%s+%s+%s" % (AUDIO_FILE, str(SILENCE_THRESHOLD), str(DELTA_THRESHOLD), str(WINDOW_SIZE), str(MIN_SILENCE_LEN), str(MIN_FRAGMENT_LEN))).encode()).hexdigest()
 OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % RUN_ID)
 
-if not path.exists(OUT_DIR):
+if EXPORT and not path.exists(OUT_DIR):
     makedirs(OUT_DIR)
 
 # Detect silences in audio
@@ -48,16 +48,17 @@ with wav.open(AUDIO_FILE, "rb") as src:
         if prev_wnd is not None:
             delta = np.mean(curr_wnd) - np.mean(prev_wnd)
 
-            # High delta -> start of word
-            # Low delta (-) -> end of word
+            # High delta -> start of word?
+            # Low delta (-) -> end of word?
             if delta > DELTA_THRESHOLD and fragment_start is None:
                 fragment_start = i-WINDOW_SIZE
-            elif delta > DELTA_THRESHOLD and fragment_start is not None and curr_wnd[-1] > SILENCE_THRESHOLD:
-                if i - fragment_start > MIN_fragment_LEN:
+            elif delta > DELTA_THRESHOLD and fragment_start is not None and np.mean(curr_wnd) > SILENCE_THRESHOLD:
+                if i - fragment_start > MIN_FRAGMENT_LEN:
                     fragments.append((fragment_start, i-WINDOW_SIZE))
                     fragment_start = i-WINDOW_SIZE
 
             deltas.append((i, i+WINDOW_SIZE, delta))
+            ax.text(i, 1, str(int(delta)))
             means.append((i, i+WINDOW_SIZE, np.mean(curr_wnd)))
 
         prev_wnd = curr_wnd
@@ -127,7 +128,7 @@ with wav.open(AUDIO_FILE, "rb") as src:
             out.write("# speechlib v0.1 output file\n\n")
             out.write("# variables used:\n")
             out.write("AUDIO_FILE;SILENCE_THRESHOLD;DELTA_THRESHOLD;WINDOW_SIZE;MIN_SILENCE_LEN;MIN_fragment_LEN\n")
-            out.write("%s\n\n" % ";".join([AUDIO_FILE, str(SILENCE_THRESHOLD), str(DELTA_THRESHOLD), str(WINDOW_SIZE), str(MIN_SILENCE_LEN), str(MIN_fragment_LEN)]))
+            out.write("%s\n\n" % ";".join([AUDIO_FILE, str(SILENCE_THRESHOLD), str(DELTA_THRESHOLD), str(WINDOW_SIZE), str(MIN_SILENCE_LEN), str(MIN_FRAGMENT_LEN)]))
             out.write("# fragments detected:\n")
             out.write("%s\n" % ";".join(headers))
             for export in exports:
@@ -135,7 +136,5 @@ with wav.open(AUDIO_FILE, "rb") as src:
 
     if DRAW:
         ax.set_xlabel("Time (s)")
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: "%.2f" % (float(x) / 44100.0)))
+        #ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: "%.2f" % (float(x) / 44100.0)))
         plt.show()
-
-
