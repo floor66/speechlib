@@ -6,7 +6,7 @@ from hashlib import md5
 import speech_recognition as sr
 
 class Window():
-    def __init__(self, start_frame, end_frame, delta, mean):
+    def __init__(self, start_frame, end_frame, delta = None, mean = None):
         self.start_frame = start_frame
         self.end_frame = end_frame
         self.delta = delta

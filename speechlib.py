@@ -29,22 +29,44 @@ class SpeechLib():
         prev_wnd = None
         fragment_start = None
         i = 0
-        while i < len(from_fragment.signal):
-            curr_wnd = abs(from_fragment.signal[i:i+self.settings.WINDOW_SIZE])
+        while i < from_fragment.end_frame - from_fragment.start_frame:
+            i_offset = i + from_fragment.start_frame
+            curr_wnd = abs(from_fragment.signal[i_offset:i_offset+self.settings.WINDOW_SIZE])
 
             if prev_wnd is not None:
                 delta = np.mean(curr_wnd) - np.mean(prev_wnd)
 
                 if delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
-                    fragment_start = i-self.settings.WINDOW_SIZE
+                    fragment_start = i_offset-self.settings.WINDOW_SIZE
                 elif delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and np.mean(curr_wnd) > self.settings.SILENCE_THRESHOLD:
-                    if i - fragment_start > self.settings.MIN_FRAGMENT_LEN:
-                        fragments_found.append(Fragment(from_fragment, fragment_start, i-self.settings.WINDOW_SIZE))
-                        fragment_start = i-self.settings.WINDOW_SIZE
+                    if i_offset - fragment_start > self.settings.MIN_FRAGMENT_LEN:
+                        fragments_found.append(Fragment(from_fragment, fragment_start, i_offset-self.settings.WINDOW_SIZE))
+                        fragment_start = i_offset-self.settings.WINDOW_SIZE
 
-                windows.append(Window(i, i+self.settings.WINDOW_SIZE, delta, np.mean(curr_wnd)))
+                windows.append(Window(i_offset, i_offset+self.settings.WINDOW_SIZE, delta, np.mean(curr_wnd)))
 
             prev_wnd = curr_wnd
             i += self.settings.WINDOW_SIZE
 
         return fragments_found, windows
+
+    def fragments_by_silence(self, from_fragment):
+        if len(from_fragment.signal) < self.settings.SILENCE_THRESHOLD:
+            raise IndexError("Can't process fragment: SILENCE_THRESHOLD is greater than the fragment length")
+
+        silences = []
+        silence_start = None
+        for i in range(from_fragment.end_frame - from_fragment.start_frame):
+            i_offset = i + from_fragment.start_frame
+            if abs(from_fragment.signal[i_offset]) <= self.settings.SILENCE_THRESHOLD:
+                if silence_start is None:
+                    silence_start = i_offset
+            elif silence_start is not None:
+                if (i_offset - silence_start) > self.settings.MIN_SILENCE_LEN:
+                    silences.append(Window(silence_start, i_offset))
+
+                silence_start = None
+
+        # Fragments start halfway prev silence and end halfway curr silence
+        fragments_found = [Fragment(from_fragment, silences[i - 1].start_frame - (silences[i - 1].size // 2), silences[i].start_frame + (silences[i].size // 2)) for i in range(1, len(silences))]
+        return fragments_found, silences

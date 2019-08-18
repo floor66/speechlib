@@ -14,22 +14,29 @@ settings.RECOGNIZE = False
 main = SpeechLib(settings)
 main.settings.OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % main.generate_runid())
 
-fragments, windows = main.fragments_by_delta(main.src_fragment)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.plot(abs(main.src_fragment.signal))
 
-for i, fragment in enumerate(fragments):
-    ax.axvline(fragment.start_frame, color="black")
-    ax.axvline(fragment.end_frame, color="grey")
-    ax.axvspan(fragment.start_frame, fragment.end_frame, color="red", alpha=0.2)
-    ax.text(fragment.start_frame, -250, str(i))
+fragments, silences = main.fragments_by_silence(main.src_fragment)
+
+for i, s in enumerate(silences):
+    ax.axvline(s.start_frame, color="black", linestyle="dashed")
+    ax.axvline(s.end_frame, color="grey", linestyle="dashed")
+    ax.text(s.start_frame, 0, str(i))
+
+fragments, windows = main.fragments_by_delta(fragments)
+
+for i, f in enumerate(fragments):
+    ax.axvline(f.start_frame, color="black")
+    ax.axvline(f.end_frame, color="grey")
+    ax.axvspan(f.start_frame, f.end_frame, color="red", alpha=0.2)
+    ax.text(f.start_frame, -250, str(i))
 
 # Windows/means
-ax2 = ax.twinx()
-ax2.plot([w.start_frame + (w.size // 2) for w in windows], [w.mean for w in windows], color="red")
-[ax2.axvline(w.start_frame, color="black", alpha=0.1) for w in windows]
-[ax2.text(w.start_frame + (w.size // 2), 0, str(int(w.mean))) for w in windows]
+ax.plot([w.start_frame + (w.size // 2) for w in windows], [w.mean for w in windows], color="red")
+[ax.axvline(w.start_frame, color="black", alpha=0.1) for w in windows]
+[ax.text(w.start_frame + (w.size // 2), -500, str(int(w.mean))) for w in windows]
 
 plt.show()
 
