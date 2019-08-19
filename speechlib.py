@@ -68,5 +68,5 @@ class SpeechLib():
                 silence_start = None
 
         # Fragments start halfway prev silence and end halfway curr silence
-        fragments_found = [Fragment(from_fragment, silences[i - 1].start_frame - (silences[i - 1].size // 2), silences[i].start_frame + (silences[i].size // 2)) for i in range(1, len(silences))]
+        fragments_found = [Fragment(from_fragment, silences[i - 1].start_frame - (silences[i - 1].size // 4), silences[i].start_frame + (silences[i].size // 4)) for i in range(1, len(silences))]
         return fragments_found, silences

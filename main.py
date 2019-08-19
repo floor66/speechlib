@@ -2,6 +2,9 @@ from os import path
 import matplotlib.pyplot as plt
 from speechlib import Settings, SpeechLib
 
+DRAW = True
+EXPORT = True
+
 settings = Settings()
 settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1_min.wav")
 settings.SILENCE_THRESHOLD = 300
@@ -9,36 +12,42 @@ settings.DELTA_THRESHOLD = 200
 settings.WINDOW_SIZE = 7500
 settings.MIN_SILENCE_LEN = 2000
 settings.MIN_FRAGMENT_LEN = 10000
-settings.RECOGNIZE = False
 
 main = SpeechLib(settings)
 main.settings.OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % main.generate_runid())
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.plot(abs(main.src_fragment.signal))
-
 fragments, silences = main.fragments_by_silence(main.src_fragment)
+if DRAW:
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(abs(main.src_fragment.signal))
 
-for i, s in enumerate(silences):
-    ax.axvline(s.start_frame, color="black", linestyle="dashed")
-    ax.axvline(s.end_frame, color="grey", linestyle="dashed")
-    ax.text(s.start_frame, 0, str(i))
+    for i, s in enumerate(silences):
+        ax.axvline(s.start_frame, color="black", linestyle="dashed")
+        ax.axvline(s.end_frame, color="grey", linestyle="dashed")
+        ax.text(s.start_frame, 0, str(i))
 
-fragments, windows = main.fragments_by_delta(fragments)
+print("%i fragments by silence" % len(fragments))
 
-for i, f in enumerate(fragments):
-    ax.axvline(f.start_frame, color="black")
-    ax.axvline(f.end_frame, color="grey")
-    ax.axvspan(f.start_frame, f.end_frame, color="red", alpha=0.2)
-    ax.text(f.start_frame, -250, str(i))
+if EXPORT:
+    [f.generate_wav(main.settings.OUT_DIR) for f in fragments]
 
-# Windows/means
-ax.plot([w.start_frame + (w.size // 2) for w in windows], [w.mean for w in windows], color="red")
-[ax.axvline(w.start_frame, color="black", alpha=0.1) for w in windows]
-[ax.text(w.start_frame + (w.size // 2), -500, str(int(w.mean))) for w in windows]
+fragments, windows = main.fragments_by_delta(main.src_fragment)
+print("%i fragments by delta" % len(fragments))
+if DRAW:
+    for i, f in enumerate(fragments):
+        ax.axvline(f.start_frame, color="black")
+        ax.axvline(f.end_frame, color="grey")
+        ax.axvspan(f.start_frame, f.end_frame, color="red", alpha=0.2)
+        ax.text(f.start_frame, -250, str(i))
 
-plt.show()
+    # Windows/means
+    ax.plot([w.start_frame + (w.size // 2) for w in windows], [w.mean for w in windows], color="red")
+    for i, w in enumerate(windows):
+        ax.axvline(w.start_frame, color="black", alpha=0.1)
+        ax.text(w.start_frame + (w.size // 2), -500, str(int(w.mean)))
+
+    plt.show()
 
 """
     # CSV file with

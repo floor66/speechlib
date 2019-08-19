@@ -5,6 +5,8 @@ import struct
 from hashlib import md5
 import speech_recognition as sr
 
+CTR = 0
+
 class Window():
     def __init__(self, start_frame, end_frame, delta = None, mean = None):
         self.start_frame = start_frame
@@ -56,19 +58,23 @@ class Fragment():
             print(e)
 
     def generate_wav(self, out_dir):
+        global CTR
         if not path.exists(out_dir):
             makedirs(out_dir)
 
-        self.out_file = path.join(out_dir, "fragment-%s.wav" % self.generate_hash())
+        self.out_file = path.join(out_dir, "%i-fragment-%s.wav" % (CTR, self.generate_hash()))
 
-        with wave.open(self.out_file, "w") as out:
-            out.setnchannels(1)
-            out.setsampwidth(2)
-            out.setframerate(44100.0)
+        if not path.exists(self.out_file):
+            with wave.open(self.out_file, "w") as out:
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(44100.0)
 
-            for i in range(self.start_frame, self.end_frame):
-                data = struct.pack("<h", self.signal[i])
-                out.writeframesraw(data)
+                for i in range(self.start_frame, self.end_frame):
+                    data = struct.pack("<h", self.signal[i])
+                    out.writeframesraw(data)
+
+        CTR += 1
 
     def __repr__(self):
         return "Fragment(audio_file=%s, start_frame=%i, end_frame=%i)" % (self.audio_file, self.start_frame, self.end_frame)
