@@ -17,10 +17,10 @@ class SpeechLib():
          str(self.settings.MIN_SILENCE_LEN), str(self.settings.MIN_FRAGMENT_LEN))).encode()).hexdigest()
 
     def fragments_by_delta(self, from_fragment):
-        if len(from_fragment.signal) < self.settings.WINDOW_SIZE:
+        if from_fragment.window.size < self.settings.WINDOW_SIZE:
             raise IndexError("Can't process fragment: WINDOW_SIZE is greater than the fragment length")
 
-        if len(from_fragment.signal) < self.settings.MIN_FRAGMENT_LEN:
+        if from_fragment.window.size < self.settings.MIN_FRAGMENT_LEN:
             raise IndexError("Can't process fragment: MIN_FRAGMENT_LEN is greater than the fragment length")
 
         fragments_found = []
@@ -29,8 +29,8 @@ class SpeechLib():
         prev_wnd = None
         fragment_start = None
         i = 0
-        while i < from_fragment.end_frame - from_fragment.start_frame:
-            i_offset = i + from_fragment.start_frame
+        while i < from_fragment.window.size:
+            i_offset = i + from_fragment.window.start_frame
             curr_wnd = abs(from_fragment.signal[i_offset:i_offset+self.settings.WINDOW_SIZE])
 
             if prev_wnd is not None:
@@ -51,13 +51,13 @@ class SpeechLib():
         return fragments_found, windows
 
     def fragments_by_silence(self, from_fragment):
-        if len(from_fragment.signal) < self.settings.SILENCE_THRESHOLD:
+        if from_fragment.window.size < self.settings.SILENCE_THRESHOLD:
             raise IndexError("Can't process fragment: SILENCE_THRESHOLD is greater than the fragment length")
 
         silences = []
         silence_start = None
-        for i in range(from_fragment.end_frame - from_fragment.start_frame):
-            i_offset = i + from_fragment.start_frame
+        for i in range(from_fragment.window.size):
+            i_offset = i + from_fragment.window.start_frame
             if abs(from_fragment.signal[i_offset]) <= self.settings.SILENCE_THRESHOLD:
                 if silence_start is None:
                     silence_start = i_offset

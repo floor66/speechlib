@@ -15,20 +15,21 @@ class Window():
         self.mean = mean
         self.size = self.end_frame - self.start_frame
 
+    def __repr__(self):
+        return "Window(start_frame = %i, end_frame = %i, size = %i, delta = %.2f, mean = %.2f)" % (self.start_frame, self.end_frame, self.size, self.delta, self.mean)
+
 class Fragment():
     def __init__(self, source, start_frame = None, end_frame = None):
         if type(source) is str:
             self.source = source
             self.signal = self.load_wav(source)
             self.audio_file = self.source
-            self.start_frame = 0
-            self.end_frame = len(self.signal) - 1
+            self.window = Window(0, len(self.signal) - 1)
         elif type(source) is Fragment:
             self.source = source
             self.audio_file = self.source.audio_file
             self.signal = self.source.signal
-            self.start_frame = start_frame
-            self.end_frame = end_frame
+            self.window = Window(start_frame, end_frame)
         else:
             raise ValueError("Fragment source needs to eiter be the path to a .wav file or a Fragment")
 
@@ -40,7 +41,7 @@ class Fragment():
             return np.fromstring(src.readframes(-1), "Int16")
 
     def generate_hash(self):
-        return md5(("%s+%s+%s+%s" % (self.audio_file, str(self.start_frame), str(self.end_frame), self.google_recognized_string)).encode()).hexdigest()
+        return md5(("%s+%s+%s+%s" % (self.audio_file, str(self.window.start_frame), str(self.window.end_frame), self.google_recognized_string)).encode()).hexdigest()
 
     def google_recognize_fragment(self):
         r = sr.Recognizer()
@@ -70,12 +71,12 @@ class Fragment():
                 out.setsampwidth(2)
                 out.setframerate(44100.0)
 
-                for i in range(self.start_frame, self.end_frame):
+                for i in range(self.window.start_frame, self.window.end_frame):
                     data = struct.pack("<h", self.signal[i])
                     out.writeframesraw(data)
 
         CTR += 1
 
     def __repr__(self):
-        return "Fragment(audio_file=%s, start_frame=%i, end_frame=%i)" % (self.audio_file, self.start_frame, self.end_frame)
+        return "Fragment(audio_file=%s, Window=%s)" % (self.audio_file, self.window)
 
