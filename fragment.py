@@ -8,30 +8,41 @@ import speech_recognition as sr
 CTR = 0
 
 class Window():
-    def __init__(self, start_frame, end_frame, delta = None, mean = None):
+    def __init__(self, start_frame, end_frame, mean = None, delta = 0):
         self.start_frame = start_frame
         self.end_frame = end_frame
-        self.delta = delta
         self.mean = mean
-        self.size = self.end_frame - self.start_frame
+        self.delta = delta
+
+    def set_delta(self, val):
+        self.delta = val
+
+    def __len__(self):
+        return 1 + self.end_frame - self.start_frame
 
     def __repr__(self):
-        return "Window(start_frame = %i, end_frame = %i, size = %i, delta = %.2f, mean = %.2f)" % (self.start_frame, self.end_frame, self.size, self.delta, self.mean)
+        return "Window(start_frame=%i, end_frame=%i, len=%i, mean=%s, delta=%s)" % (
+            self.start_frame, self.end_frame, self.__len__(), str(self.mean), str(self.delta)
+            )
 
 class Fragment():
     def __init__(self, source, start_frame = None, end_frame = None):
+        global CTR
+        self._id = CTR
+        CTR += 1
+
         if type(source) is str:
             self.source = source
-            self.signal = self.load_wav(source)
+            self.src_audio_signal = self.load_wav(source)
             self.audio_file = self.source
-            self.window = Window(0, len(self.signal) - 1)
+            self.window = Window(0, len(self.src_audio_signal) - 1)
         elif type(source) is Fragment:
             self.source = source
             self.audio_file = self.source.audio_file
-            self.signal = self.source.signal
-            self.window = Window(start_frame, end_frame)
+            self.src_audio_signal = self.source.src_audio_signal
+            self.window = Window(start_frame if start_frame >= 0 else 0, end_frame if end_frame < len(self.src_audio_signal) else len(self.src_audio_signal) - 1)
         else:
-            raise ValueError("Fragment source needs to eiter be the path to a .wav file or a Fragment")
+            raise ValueError("Can't create Fragment: source needs to eiter be the path to a .wav file or a Fragment")
 
         self.google_recognized_string = ""
         self.out_file = ""
@@ -59,24 +70,25 @@ class Fragment():
             print(e)
 
     def generate_wav(self, out_dir):
-        global CTR
         if not path.exists(out_dir):
             makedirs(out_dir)
 
-        self.out_file = path.join(out_dir, "%i-fragment-%s.wav" % (CTR, self.generate_hash()))
+        self.out_file = path.join(out_dir, "%i-fragment-%s.wav" % (self._id, self.generate_hash()))
 
         if not path.exists(self.out_file):
             with wave.open(self.out_file, "w") as out:
+                #pylint: disable=no-member
                 out.setnchannels(1)
                 out.setsampwidth(2)
                 out.setframerate(44100.0)
 
                 for i in range(self.window.start_frame, self.window.end_frame):
-                    data = struct.pack("<h", self.signal[i])
+                    data = struct.pack("<h", self.src_audio_signal[i])
                     out.writeframesraw(data)
 
-        CTR += 1
+    def __len__(self):
+        return len(self.window)
 
     def __repr__(self):
-        return "Fragment(audio_file=%s, Window=%s)" % (self.audio_file, self.window)
+        return "Fragment(_id=%i, source=%s, window=%s)" % (self._id, self.source, self.window)
 

@@ -1,9 +1,10 @@
 from os import path
 import matplotlib.pyplot as plt
-from speechlib import Settings, SpeechLib
+from speechlib import Settings, SpeechLib, microtime
+from fragment import Fragment
 
 DRAW = True
-EXPORT = False
+EXPORT = True
 
 settings = Settings()
 settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/trump_1_min.wav")
@@ -16,11 +17,13 @@ settings.MIN_FRAGMENT_LEN = 10000
 main = SpeechLib(settings)
 main.settings.OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % main.generate_runid())
 
+t = microtime()
 silence_fragments, silences = main.fragments_by_silence(main.src_fragment)
-print("%i fragments by silence" % len(silence_fragments))
+print("%i fragments by silence (%i ms)" % (len(silence_fragments), microtime() - t))
 
+t = microtime()
 delta_fragments, windows = main.fragments_by_delta(main.src_fragment)
-print("%i fragments by delta" % len(delta_fragments))
+print("%i fragments by delta (%i ms)" % (len(delta_fragments), microtime() - t))
 
 if EXPORT:
     print("Exporting...")
@@ -30,12 +33,15 @@ if DRAW:
     print("Drawing...")
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(abs(main.src_fragment.signal))
+    ax.plot(abs(main.src_fragment.src_audio_signal))
 
     # Silences
+    for i, s in enumerate(silence_fragments):
+        ax.axvline(s.window.start_frame, color="black", linestyle="dashed")
+        ax.axvline(s.window.end_frame, color="grey", linestyle="dashed")
+        ax.text(s.window.start_frame, 0, str(i))
+
     for i, s in enumerate(silences):
-        ax.axvline(s.start_frame, color="black", linestyle="dashed")
-        ax.axvline(s.end_frame, color="grey", linestyle="dashed")
         ax.text(s.start_frame, 0, str(i))
 
     # Deltas/windows/means
@@ -43,14 +49,16 @@ if DRAW:
         ax.axvline(f.window.start_frame, color="black")
         ax.axvline(f.window.end_frame, color="grey")
         ax.axvspan(f.window.start_frame, f.window.end_frame, color="red", alpha=0.2)
-        ax.text(f.window.start_frame, -250, str(i))
+        ax.text(f.window.start_frame, -250, str(f._id))
 
-    ax.plot([w.start_frame + (w.size // 2) for w in windows], [w.mean for w in windows], color="red")
+    ax.plot([w.start_frame + (len(w) // 2) for w in windows], [w.mean for w in windows], color="red")
     for i, w in enumerate(windows):
         ax.axvline(w.start_frame, color="black", alpha=0.1)
-        ax.text(w.start_frame + (w.size // 2), int(w.mean), "%s (%s%s)" % (str(int(w.mean)), "+" if w.delta >= 0 else "", str(int(w.delta))))
+        ax.text(w.start_frame + (len(w) // 2), int(w.mean), "%s (%s%s)" % (str(int(w.mean)), "+" if w.delta >= 0 else "", str(int(w.delta))))
 
-    plt.xlim((520000, 660000))
+    # plt.xlim(850000, 1025000)
+    # plt.ylim(-1000, 6000)
+
     plt.show()
 
 """

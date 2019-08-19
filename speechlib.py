@@ -1,6 +1,9 @@
 from fragment import Fragment, Window
 from hashlib import md5
 import numpy as np
+import time
+
+microtime = lambda: int(round(time.time() * 1000))
 
 class Settings():
     def __init__(self):
@@ -16,57 +19,60 @@ class SpeechLib():
          str(self.settings.DELTA_THRESHOLD), str(self.settings.WINDOW_SIZE),
          str(self.settings.MIN_SILENCE_LEN), str(self.settings.MIN_FRAGMENT_LEN))).encode()).hexdigest()
 
-    def fragments_by_delta(self, from_fragment):
-        if from_fragment.window.size < self.settings.WINDOW_SIZE:
+    def extract_windows(self, from_fragment, WINDOW_SIZE=None):
+        WINDOW_SIZE = self.settings.WINDOW_SIZE if WINDOW_SIZE is None else WINDOW_SIZE
+
+        if len(from_fragment) < WINDOW_SIZE:
             raise IndexError("Can't process fragment: WINDOW_SIZE is greater than the fragment length")
 
-        if from_fragment.window.size < self.settings.MIN_FRAGMENT_LEN:
+        return [Window(
+            from_fragment.window.start_frame + (i * WINDOW_SIZE),
+            from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE),
+            np.mean(
+                abs(from_fragment.src_audio_signal[from_fragment.window.start_frame + (i * WINDOW_SIZE):from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE)])
+                )
+            ) for i in range(len(from_fragment) // WINDOW_SIZE)]
+
+    def fragments_by_delta(self, from_fragment):
+        if len(from_fragment) < self.settings.MIN_FRAGMENT_LEN:
             raise IndexError("Can't process fragment: MIN_FRAGMENT_LEN is greater than the fragment length")
 
         fragments_found = []
-        windows = []
+        windows = self.extract_windows(from_fragment)
 
-        prev_wnd = None
-        fragment_start = None
-        i = 0
-        while i < from_fragment.window.size:
-            i_offset = i + from_fragment.window.start_frame
-            curr_wnd = abs(from_fragment.signal[i_offset:i_offset+self.settings.WINDOW_SIZE])
+        if len(windows) > 1:
+            fragment_start = None
+            for i in range(1, len(windows)):
+                windows[i].delta = windows[i].mean - windows[i - 1].mean
 
-            if prev_wnd is not None:
-                delta = np.mean(curr_wnd) - np.mean(prev_wnd)
-
-                if delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
-                    fragment_start = i_offset-self.settings.WINDOW_SIZE
-                elif delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and np.mean(curr_wnd) > self.settings.SILENCE_THRESHOLD:
-                    if i_offset - fragment_start > self.settings.MIN_FRAGMENT_LEN:
-                        fragments_found.append(Fragment(from_fragment, fragment_start, i_offset-self.settings.WINDOW_SIZE))
-                        fragment_start = i_offset-self.settings.WINDOW_SIZE
-
-                windows.append(Window(i_offset, i_offset+self.settings.WINDOW_SIZE, delta, np.mean(curr_wnd)))
-
-            prev_wnd = curr_wnd
-            i += self.settings.WINDOW_SIZE
+                if windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
+                    fragment_start = windows[i].start_frame
+                elif windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and windows[i].mean > self.settings.SILENCE_THRESHOLD:
+                    if windows[i].start_frame - fragment_start >= self.settings.MIN_FRAGMENT_LEN:
+                        fragments_found.append(Fragment(from_fragment, fragment_start, windows[i].start_frame))
+                        fragment_start = windows[i].start_frame
 
         return fragments_found, windows
 
-    def fragments_by_silence(self, from_fragment):
-        if from_fragment.window.size < self.settings.SILENCE_THRESHOLD:
-            raise IndexError("Can't process fragment: SILENCE_THRESHOLD is greater than the fragment length")
+    def fragments_by_silence(self, from_fragment, SILENCE_THRESHOLD=None):
+        if len(from_fragment) < self.settings.MIN_SILENCE_LEN:
+            raise IndexError("Can't process fragment: MIN_SILENCE_LEN is greater than the fragment length")
+
+        SILENCE_THRESHOLD = self.settings.SILENCE_THRESHOLD if SILENCE_THRESHOLD is None else SILENCE_THRESHOLD
 
         silences = []
         silence_start = None
-        for i in range(from_fragment.window.size):
+        for i in range(len(from_fragment)):
             i_offset = i + from_fragment.window.start_frame
-            if abs(from_fragment.signal[i_offset]) <= self.settings.SILENCE_THRESHOLD:
+            if abs(from_fragment.src_audio_signal[i_offset]) <= SILENCE_THRESHOLD:
                 if silence_start is None:
                     silence_start = i_offset
             elif silence_start is not None:
-                if (i_offset - silence_start) > self.settings.MIN_SILENCE_LEN:
+                if (i_offset - silence_start) >= self.settings.MIN_SILENCE_LEN:
                     silences.append(Window(silence_start, i_offset))
 
                 silence_start = None
 
-        # Fragments start halfway prev silence and end halfway curr silence
-        fragments_found = [Fragment(from_fragment, silences[i - 1].start_frame - (silences[i - 1].size // 4), silences[i].start_frame + (silences[i].size // 4)) for i in range(1, len(silences))]
+        # Fragments start 3/4 prev silence and end 1/4 curr silence
+        fragments_found = [Fragment(from_fragment, silences[i - 1].end_frame - (len(silences[i - 1]) // 4), silences[i].start_frame + (len(silences[i]) // 4)) for i in range(1, len(silences))]
         return fragments_found, silences
