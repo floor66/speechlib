@@ -13,6 +13,9 @@ class SpeechLib():
     def __init__(self, settings):
         self.settings = settings
         self.src_fragment = Fragment(self.settings.AUDIO_FILE)
+        self.settings.WINDOW_SIZE = int(self.settings.WINDOW_SIZE * (self.src_fragment.src_freq / 1000))
+        self.settings.MIN_SILENCE_LEN = int(self.settings.MIN_SILENCE_LEN * (self.src_fragment.src_freq / 1000))
+        self.settings.MIN_FRAGMENT_LEN = int(self.settings.MIN_FRAGMENT_LEN * (self.src_fragment.src_freq / 1000))
 
     def generate_runid(self):
         return md5(("%s+%s+%s+%s+%s+%s" % (self.settings.AUDIO_FILE, str(self.settings.SILENCE_THRESHOLD),
@@ -45,11 +48,11 @@ class SpeechLib():
             windows[i].delta = windows[i].mean - windows[i - 1].mean if i > 0 else windows[i].mean
 
             if windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
-                fragment_start = windows[i].start_frame
+                fragment_start = windows[i].start_frame - (self.settings.WINDOW_SIZE // 2)
             elif windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and windows[i].mean > self.settings.SILENCE_THRESHOLD:
                 if windows[i].start_frame - fragment_start >= self.settings.MIN_FRAGMENT_LEN:
                     fragments_found.append(Fragment(from_fragment, fragment_start, windows[i].start_frame))
-                    fragment_start = windows[i].start_frame
+                    fragment_start = windows[i].start_frame - (self.settings.WINDOW_SIZE // 2)
 
         if fragment_start is not None:
             fragments_found.append(Fragment(from_fragment, fragment_start, from_fragment.window.end_frame))

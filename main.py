@@ -1,25 +1,36 @@
 from os import path
+import sys
 import matplotlib.pyplot as plt
 from speechlib import Settings, SpeechLib, microtime
 from fragment import Fragment
+import wave
+
+def printf(content):
+    sys.stdout.write(content)
+    sys.stdout.flush()
 
 DRAW = True
 EXPORT = True
 RECOGNIZE = True
 
 settings = Settings()
-settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/oval.wav")
+settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/obama.wav")
 settings.SILENCE_THRESHOLD = 500
 settings.DELTA_THRESHOLD = 200
-settings.WINDOW_SIZE = 10000
-settings.MIN_SILENCE_LEN = 2000
-settings.MIN_FRAGMENT_LEN = 20000
+
+# In ms, so it works with all framerates
+settings.WINDOW_SIZE = 200
+settings.MIN_SILENCE_LEN = 300
+settings.MIN_FRAGMENT_LEN = 400
 
 main = SpeechLib(settings)
 main.settings.OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % main.generate_runid())
 
+# Clip
+min_fragment = Fragment(main.src_fragment, 0, (main.src_fragment.src_freq * 60))
+
 t = microtime()
-silence_fragments, silences = main.fragments_by_silence(main.src_fragment)
+silence_fragments, silences = main.fragments_by_silence(min_fragment)
 print("%i fragments by silence (%i ms)" % (len(silence_fragments), microtime() - t))
 
 t = microtime()
@@ -33,25 +44,31 @@ for f in silence_fragments:
 print("%i fragments by delta (%i ms)" % (len(delta_fragments), microtime() - t))
 
 if EXPORT:
-    print("Exporting...")
+    printf("Exporting... 0/%i\r" % len(delta_fragments))
     #[f.generate_wav(main.settings.OUT_DIR) for f in silence_fragments]
-    [f.generate_wav(main.settings.OUT_DIR) for f in delta_fragments]
+    for i, f in enumerate(delta_fragments):
+        printf("Exporting... %i/%i\r" % (i + 1, len(delta_fragments)))
+        f.generate_wav(main.settings.OUT_DIR, main.src_fragment.src_freq)
+    print("")
 
 if RECOGNIZE:
-    print("Recognizing...")
-    with open("res.txt", "w") as res:
-        for f in delta_fragments:
-            f.google_recognize_fragment()
+    printf("Recognizing... 0/%i\r" % len(delta_fragments))
+    for i, f in enumerate(delta_fragments):
+        f.google_recognize_fragment()
+
+        printf("Recognizing... %i/%i\r" % ((i + 1), len(delta_fragments)))
+        with open("res.txt", "a") as res:
             res.write(str(f._id))
             res.write("\t")
             res.write(f.google_recognized_string)
             res.write("\n")
+    print("")
 
 if DRAW:
     print("Drawing...")
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(abs(main.src_fragment.src_audio_signal))
+    ax.plot(abs(min_fragment.src_audio_signal[min_fragment.window.start_frame:min_fragment.window.end_frame]))
 
     # Silences
     for i, f in enumerate(silence_fragments):
@@ -76,7 +93,6 @@ if DRAW:
     # wm = plt.get_current_fig_manager()
     # wm.window.state("zoomed")
 
-    plt.xlim(0, 1E6)
     plt.show()
 
 """

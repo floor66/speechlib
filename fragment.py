@@ -40,6 +40,7 @@ class Fragment():
             self.source = source
             self.audio_file = self.source.audio_file
             self.src_audio_signal = self.source.src_audio_signal
+            self.src_freq = self.source.src_freq
             self.window = Window(start_frame if start_frame >= 0 else 0, end_frame if end_frame < len(self.src_audio_signal) else len(self.src_audio_signal) - 1)
         else:
             raise ValueError("Can't create Fragment: source needs to eiter be the path to a .wav file or a Fragment")
@@ -49,6 +50,7 @@ class Fragment():
 
     def load_wav(self, path):
         with wave.open(path, "rb") as src:
+            self.src_freq = src.getframerate()
             return np.fromstring(src.readframes(-1), "Int16")
 
     def generate_hash(self):
@@ -69,7 +71,7 @@ class Fragment():
         except Exception as e:
             print(e)
 
-    def generate_wav(self, out_dir):
+    def generate_wav(self, out_dir, freq=44100.0):
         if not path.exists(out_dir):
             makedirs(out_dir)
 
@@ -80,7 +82,7 @@ class Fragment():
                 #pylint: disable=no-member
                 out.setnchannels(1)
                 out.setsampwidth(2)
-                out.setframerate(44100.0)
+                out.setframerate(freq)
 
                 for i in range(self.window.start_frame, self.window.end_frame):
                     data = struct.pack("<h", self.src_audio_signal[i])
