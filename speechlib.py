@@ -26,10 +26,10 @@ class SpeechLib():
             raise IndexError("Can't process fragment: WINDOW_SIZE is greater than the fragment length")
 
         return [Window(
-            from_fragment.window.start_frame + (i * WINDOW_SIZE),
-            from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE),
-            np.mean(
-                abs(from_fragment.src_audio_signal[from_fragment.window.start_frame + (i * WINDOW_SIZE):from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE)])
+                from_fragment.window.start_frame + (i * WINDOW_SIZE),
+                from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE),
+                np.mean(
+                    abs(from_fragment.src_audio_signal[from_fragment.window.start_frame + (i * WINDOW_SIZE):from_fragment.window.start_frame + ((i + 1) * WINDOW_SIZE)])
                 )
             ) for i in range(len(from_fragment) // WINDOW_SIZE)]
 
@@ -40,17 +40,19 @@ class SpeechLib():
         fragments_found = []
         windows = self.extract_windows(from_fragment)
 
-        if len(windows) > 1:
-            fragment_start = None
-            for i in range(1, len(windows)):
-                windows[i].delta = windows[i].mean - windows[i - 1].mean
+        fragment_start = None
+        for i in range(len(windows)):
+            windows[i].delta = windows[i].mean - windows[i - 1].mean if i > 0 else windows[i].mean
 
-                if windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
+            if windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is None:
+                fragment_start = windows[i].start_frame
+            elif windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and windows[i].mean > self.settings.SILENCE_THRESHOLD:
+                if windows[i].start_frame - fragment_start >= self.settings.MIN_FRAGMENT_LEN:
+                    fragments_found.append(Fragment(from_fragment, fragment_start, windows[i].start_frame))
                     fragment_start = windows[i].start_frame
-                elif windows[i].delta > self.settings.DELTA_THRESHOLD and fragment_start is not None and windows[i].mean > self.settings.SILENCE_THRESHOLD:
-                    if windows[i].start_frame - fragment_start >= self.settings.MIN_FRAGMENT_LEN:
-                        fragments_found.append(Fragment(from_fragment, fragment_start, windows[i].start_frame))
-                        fragment_start = windows[i].start_frame
+
+        if fragment_start is not None:
+            fragments_found.append(Fragment(from_fragment, fragment_start, from_fragment.window.end_frame))
 
         return fragments_found, windows
 
@@ -61,17 +63,28 @@ class SpeechLib():
         SILENCE_THRESHOLD = self.settings.SILENCE_THRESHOLD if SILENCE_THRESHOLD is None else SILENCE_THRESHOLD
 
         silences = []
+        windows = self.extract_windows(from_fragment, WINDOW_SIZE=1000)
         silence_start = None
-        for i in range(len(from_fragment)):
-            i_offset = i + from_fragment.window.start_frame
-            if abs(from_fragment.src_audio_signal[i_offset]) <= SILENCE_THRESHOLD:
+        for i in range(len(windows)):
+            if windows[i].mean <= SILENCE_THRESHOLD:
                 if silence_start is None:
-                    silence_start = i_offset
+                    silence_start = windows[i].start_frame
             elif silence_start is not None:
-                if (i_offset - silence_start) >= self.settings.MIN_SILENCE_LEN:
-                    silences.append(Window(silence_start, i_offset))
+                if (windows[i].start_frame - silence_start) >= self.settings.MIN_SILENCE_LEN:
+                    silences.append(Window(silence_start, windows[i].start_frame))
 
                 silence_start = None
+
+        # for i in range(len(from_fragment)):
+        #     i_offset = i + from_fragment.window.start_frame
+        #     if abs(from_fragment.src_audio_signal[i_offset]) <= SILENCE_THRESHOLD:
+        #         if silence_start is None:
+        #             silence_start = i_offset
+        #     elif silence_start is not None:
+        #         if (i_offset - silence_start) >= self.settings.MIN_SILENCE_LEN:
+        #             silences.append(Window(silence_start, i_offset))
+
+        #         silence_start = None
 
         # Fragments start 3/4 prev silence and end 1/4 curr silence
         fragments_found = [Fragment(from_fragment, silences[i - 1].end_frame - (len(silences[i - 1]) // 4), silences[i].start_frame + (len(silences[i]) // 4)) for i in range(1, len(silences))]
