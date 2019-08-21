@@ -14,7 +14,7 @@ EXPORT = True
 RECOGNIZE = True
 
 settings = Settings()
-settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/obama.wav")
+settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/oval.wav")
 settings.SILENCE_THRESHOLD = 500
 settings.DELTA_THRESHOLD = 200
 
@@ -25,6 +25,7 @@ settings.MIN_FRAGMENT_LEN = 400
 
 main = SpeechLib(settings)
 main.settings.OUT_DIR = path.join(path.dirname(path.realpath(__file__)), "samples/out/%s/" % main.generate_runid())
+print("Run ID: %s" % main.generate_runid())
 
 # Clip
 min_fragment = Fragment(main.src_fragment, 0, (main.src_fragment.src_freq * 60))
@@ -57,7 +58,7 @@ if RECOGNIZE:
         f.google_recognize_fragment()
 
         printf("Recognizing... %i/%i\r" % ((i + 1), len(delta_fragments)))
-        with open("res.txt", "a") as res:
+        with open("res-%s.txt" % main.generate_runid(), "a") as res:
             res.write(str(f._id))
             res.write("\t")
             res.write(f.google_recognized_string)
