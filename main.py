@@ -1,6 +1,7 @@
 from os import path
 import sys
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from speechlib import Settings, SpeechLib, microtime
 from fragment import Fragment
 import wave
@@ -11,7 +12,7 @@ def printf(content):
 
 DRAW = True
 EXPORT = True
-RECOGNIZE = True
+RECOGNIZE = False
 
 settings = Settings()
 settings.AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "samples/oval.wav")
@@ -69,23 +70,27 @@ if DRAW:
     print("Drawing...")
     fig = plt.figure()
     ax = fig.add_subplot(111)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: "%i" % (1000 * (float(x) / min_fragment.src_freq))))
     ax.plot(abs(min_fragment.src_audio_signal[min_fragment.window.start_frame:min_fragment.window.end_frame]))
 
-    # Silences
+    # Plot silences
     for i, f in enumerate(silence_fragments):
         ax.plot([i for i in range(f.window.start_frame, f.window.end_frame)], [-140 for i in range(f.window.start_frame, f.window.end_frame)], color="black")
         ax.text(f.window.start_frame, -110, "SF%i" % f._id, color="black")
+
+    [ax.axvline(w.start_frame, color="green", alpha=0.2) for w in main.extract_windows(min_fragment, WINDOW_SIZE=main.settings.MIN_SILENCE_LEN)]
 
     for i, s in enumerate(silences):
         ax.plot([i for i in range(s.start_frame, s.end_frame)], [-310 for i in range(s.start_frame, s.end_frame)], color="grey")
         ax.text(s.start_frame, -280, "S%i" % i, color="grey")
 
-    # Deltas/windows/means
+    # Plot delta_fragments/windows
     for i, f in enumerate(delta_fragments):
         y = -480 if i % 2 == 0 else -650
         ax.plot([i for i in range(f.window.start_frame, f.window.end_frame)], [y for i in range(f.window.start_frame, f.window.end_frame)], color="red")
         ax.text(f.window.start_frame, y + 30, "DF%i" % f._id, color="red")
 
+    # Plot means/deltas
     ax.plot([w.start_frame + (len(w) // 2) for w in windows], [w.mean for w in windows], color="red")
     for i, w in enumerate(windows):
         ax.axvline(w.start_frame, color="black", alpha=0.1)

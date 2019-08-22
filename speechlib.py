@@ -13,6 +13,8 @@ class SpeechLib():
     def __init__(self, settings):
         self.settings = settings
         self.src_fragment = Fragment(self.settings.AUDIO_FILE)
+
+        # Convert ms back to # of frames considering the sample frequency
         self.settings.WINDOW_SIZE = int(self.settings.WINDOW_SIZE * (self.src_fragment.src_freq / 1000))
         self.settings.MIN_SILENCE_LEN = int(self.settings.MIN_SILENCE_LEN * (self.src_fragment.src_freq / 1000))
         self.settings.MIN_FRAGMENT_LEN = int(self.settings.MIN_FRAGMENT_LEN * (self.src_fragment.src_freq / 1000))
